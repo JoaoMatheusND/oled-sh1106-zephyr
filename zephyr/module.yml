@@ -5,3 +5,5 @@ name: oled-display
 build:
   cmake: .
   kconfig: Kconfig
+  depends:
+    - oled-fonts # https://github.com/edgebr/oled-mono-fonts/tree/zephyr
