@@ -32,7 +32,7 @@ config DISPLAY_MAX_FPS
     range 12 24
 
 config INACTIVE_THRESHOLD_MINS
-    depends on OLED_DISPLAY_SPI
+    depends on OLED_DISPLAY_SPI || OLED_DISPLAY_I2C
     int "Display maximum inactive time, in minutes."
     default 5
 
@@ -40,5 +40,23 @@ config VIRTUAL_DISPLAY_MARKER_STR
     depends on DISPLAY_VIRTUAL
     string "Screen buffer marker string."
     default "#!D-VRAM#!"
+
+config DISPLAY_I2C_CTRL_CMD
+    hex "I2C control command byte."
+    default 0x00
+    range 0x00 0xFF
+    depends on OLED_DISPLAY_I2C
+
+config DISPLAY_I2C_CTRL_DATA
+    hex "I2C control data byte."
+    default 0x40
+    range 0x00 0xFF
+    depends on OLED_DISPLAY_I2C
+
+config DISPLAY_I2C_MAX_PAYLOAD
+    int "I2C maximum payload size."
+    default 128
+    range 1 255
+    depends on OLED_DISPLAY_I2C
 
 endif # OLED_DISPLAY
