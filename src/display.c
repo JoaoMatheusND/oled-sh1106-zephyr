@@ -10,13 +10,9 @@
  */
 
 #include "display.h"
+#include "transport.h"
 
 #include <string.h>
-
-#include <zephyr/drivers/gpio.h>
-#if CONFIG_DISPLAY_SPI == 1
-#include <zephyr/drivers/spi.h>
-#endif
 
 /**
  * @brief Altura/largura em pixels de um byte.
@@ -61,62 +57,7 @@
  */
 K_MUTEX_DEFINE(vram_mutex);
 
-#if CONFIG_DISPLAY_SPI == 1
-/**
- * @brief Configuração do SPI do display.
- */
-#define SPI_FLAGS (SPI_OP_MODE_MASTER | SPI_WORD_SET(8) | SPI_LINES_SINGLE)
-
-/**
- * @brief Estrutura que representa o pino D/C do display.
- */
-static const struct gpio_dt_spec data_command = GPIO_DT_SPEC_GET(DT_NODELABEL(data_command), gpios);
-
-/**
- * @brief Estrutura que representa o SPI do display.
- */
-static const struct spi_dt_spec display_spi =
-	SPI_DT_SPEC_GET(DT_NODELABEL(display_spi), SPI_FLAGS, 0);
-
-/**
- * @brief Buffer de comandos, com tamanho máximo de 2 comandos sequenciais.
- */
-static struct spi_buf cmds[1];
-
-/**
- * @brief Conjunto de buffers para a SPI.
- */
-static struct spi_buf_set tx_data = {
-	.buffers = NULL,
-	.count = 1,
-};
-
-/**
- * @brief Buffer de dados de uma página para RAM do display..
- */
-static struct spi_buf page_data = {
-	.buf = NULL,
-	.len = SCR_W,
-};
-
-/**
- * @brief Configura a comunicação SPI com o display para envio de comandos.
- */
-static inline void set_command(void)
-{
-	gpio_pin_set_dt(&data_command, 0);
-	tx_data.buffers = cmds;
-}
-
-/**
- * @brief Configura a comunicação SPI com o display para envio de dados para RAM.
- */
-static inline void set_data(void)
-{
-	gpio_pin_set_dt(&data_command, 1);
-	tx_data.buffers = &page_data;
-}
-
+#if CONFIG_DISPLAY_VIRTUAL != 1
 /**
  * @brief Envia um comando para o display.
  *
@@ -133,10 +74,12 @@ static void display_send_cmd(enum display_commands cmd);
 static void display_send_double_cmd(enum display_commands cmd, uint8_t follow_up);
 
 /**
- * @brief Envia uma sequência de bytes como dados para RAM do display.
+ * @brief Envia uma página de dados para a RAM do display.
+ *
+ * @param[in] data Ponteiro para os SCR_W bytes da página.
  */
-static void display_send_page(void);
-#endif /* #elif CONFIG_DISPLAY_VIRTUAL == 1 */
+static void display_send_page(const uint8_t *data);
+#endif /* #if CONFIG_DISPLAY_VIRTUAL != 1 */
 
 /**
  * @brief Desenha um pixel na tela.
@@ -270,12 +213,8 @@ void display_init(void)
 	printk("D-VRAM: %p\n", self.screen_buffer);
 
 	memset(self.screen_buffer, 0x00, sizeof(self.screen_buffer));
-#elif CONFIG_DISPLAY_SPI == 1 /* #if CONFIG_DISPLAY_VIRTUAL == 1 */
-	gpio_pin_configure_dt(&data_command, GPIO_OUTPUT_INACTIVE);
-
-	while (!spi_is_ready_dt(&display_spi)) {
-		/** Espera a comunicação SPI estar pronta. */
-	}
+#else /* #if CONFIG_DISPLAY_VIRTUAL == 1 */
+	transport_init();
 
 	display_send_cmd(DISPLAY_CMD_DISP_OFF);
 
@@ -324,19 +263,19 @@ void display_init(void)
 
 	display_send_cmd(DISPLAY_CMD_DISP_ON);
 	k_msleep(100);
-#endif                        /* #elif CONFIG_DISPLAY_SPI == 1 */
+#endif                        /* #else CONFIG_DISPLAY_VIRTUAL == 1 */
 }
 
 void display_disable(void)
 {
-#if CONFIG_DISPLAY_SPI
+#if CONFIG_DISPLAY_VIRTUAL != 1
 	display_send_cmd(DISPLAY_CMD_DISP_OFF);
 #endif
 }
 
 void display_enable(void)
 {
-#if CONFIG_DISPLAY_SPI
+#if CONFIG_DISPLAY_VIRTUAL != 1
 	display_send_cmd(DISPLAY_CMD_DISP_ON);
 #endif
 }
@@ -367,8 +306,7 @@ void display_flush(void)
 		display_send_cmd(DISPLAY_CMD_PAGE_ADDR + page);
 		display_send_cmd(DISPLAY_CMD_RMW_START);
 
-		page_data.buf = self.draw_buffer + (page << 7);
-		display_send_page();
+		display_send_page(self.draw_buffer + (page << 7));
 
 		display_send_cmd(DISPLAY_CMD_RMW_END);
 		k_msleep(2);
@@ -573,28 +511,24 @@ void display_set_contrast(uint8_t amount)
 
 static void display_send_cmd(enum display_commands cmd)
 {
-	enum display_commands buf[] = {cmd};
-	cmds[0].buf = buf;
-	cmds[0].len = 1;
+	uint8_t buf[] = {(uint8_t)cmd};
 
-	set_command();
-	spi_write_dt(&display_spi, &tx_data);
+	transport_set_mode(TRANSPORT_MODE_CMD);
+	transport_write(buf, sizeof(buf));
 }
 
 static void display_send_double_cmd(enum display_commands cmd, uint8_t follow_up)
 {
-	enum display_commands buf[] = {cmd, follow_up};
-	cmds[0].buf = buf;
-	cmds[0].len = 2;
+	uint8_t buf[] = {(uint8_t)cmd, follow_up};
 
-	set_command();
-	spi_write_dt(&display_spi, &tx_data);
+	transport_set_mode(TRANSPORT_MODE_CMD);
+	transport_write(buf, sizeof(buf));
 }
 
-static void display_send_page(void)
+static void display_send_page(const uint8_t *data)
 {
-	set_data();
-	spi_write_dt(&display_spi, &tx_data);
+	transport_set_mode(TRANSPORT_MODE_DATA);
+	transport_write(data, SCR_W);
 }
 #endif /* #if CONFIG_DISPLAY_VIRTUAL != 1 */
 
