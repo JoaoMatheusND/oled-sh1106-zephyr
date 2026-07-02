@@ -84,8 +84,10 @@ enum display_draw_mode {
 
 /**
  * @brief Inicializa o display com as configurações padrões.
+ *
+ * @param is_dcdc_dependent Se verdadeiro, o display ativará o DC-DC interno.
  */
-void display_init(void);
+void display_init(bool is_dcdc_dependent);
 
 /**
  * @brief Desabilita o display.
