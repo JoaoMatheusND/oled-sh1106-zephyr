@@ -1,24 +1,29 @@
-# Copyright (c) 2023, Centro de Inovação Edge.
+# Copyright (c) 2026, Centro de Inovação Edge.
 # SPDX-License-Identifier: BSD-3-Clause
 
 menuconfig OLED_DISPLAY
     bool "OLED SH1106 Display"
+    default n
 
 if OLED_DISPLAY
 
 choice
 prompt "Display Hardware Communication"
-default DISPLAY_SPI
+default OLED_DISPLAY_SPI
+    config OLED_DISPLAY_I2C
+        bool "OLED SH1106 Display over I2C"
+        default n
+        depends on I2C
 
-    config DISPLAY_SPI
+    config OLED_DISPLAY_SPI
         bool "Real OLED over SPI."
-        select SPI
+        depends on SPI
 
     config DISPLAY_VIRTUAL
         bool "Virtual OLED over RTT."
-        select CONSOLE
-        select RTT_CONSOLE
-        select USE_SEGGER_RTT
+        depends on CONSOLE
+        depends on RTT_CONSOLE
+        depends on USE_SEGGER_RTT   
 endchoice
 
 config DISPLAY_MAX_FPS
@@ -27,7 +32,7 @@ config DISPLAY_MAX_FPS
     range 12 24
 
 config INACTIVE_THRESHOLD_MINS
-    depends on DISPLAY_SPI
+    depends on OLED_DISPLAY_SPI
     int "Display maximum inactive time, in minutes."
     default 5
 
