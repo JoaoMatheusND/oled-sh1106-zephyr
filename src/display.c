@@ -206,7 +206,7 @@ static struct display_control {
 	.draw_buffer = {},
 };
 
-void display_init(void)
+void display_init(bool is_dcdc_dependent)
 {
 #if CONFIG_DISPLAY_VIRTUAL == 1
 	/* Envia via RTT a posição da vRAM do display para o emulador. */
@@ -230,7 +230,7 @@ void display_init(void)
 	display_send_cmd(DISPLAY_CMD_START_LINE);
 
 	/* Liga o DC-DC interno para o display: true = ligado; false = desligado. */
-	display_send_double_cmd(DISPLAY_CMD_DC_DC_SET, 0x8A | false);
+	display_send_double_cmd(DISPLAY_CMD_DC_DC_SET, 0x8A | is_dcdc_dependent);
 
 	/* Configura a rotação da tela para retrato. */
 	display_send_cmd(DISPLAY_CMD_SEG_INV);

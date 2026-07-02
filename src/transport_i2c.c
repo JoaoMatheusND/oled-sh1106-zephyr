@@ -11,8 +11,6 @@
 
 #include <zephyr/drivers/i2c.h>
 
-#include <string.h>
-
 #include "transport.h"
 
 /**
