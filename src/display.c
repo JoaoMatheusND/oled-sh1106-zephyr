@@ -189,6 +189,8 @@ static inline void print_bmp_horizontal(const uint8_t *bmp, uint8_t top, uint8_t
  * @brief Obtém a largura de avanço de um glifo, em pixels, sem escala e sem o
  * espaçamento entre caracteres.
  *
+ * @note Caracteres fora do intervalo da fonte são substituídos pelo último caractere.
+ *
  * @param[in] fnt Fonte utilizada.
  * @param character Caractere desejado.
  * @return Largura do glifo, em pixels.
@@ -199,20 +201,7 @@ static inline uint8_t font_glyph_width(const struct font *fnt, uint8_t character
 		character = fnt->max_char;
 	}
 
-	return (fnt->widths == NULL) ? fnt->width : fnt->widths[character - fnt->min_char];
-}
-
-/**
- * @brief Obtém o número de bytes ocupados por um glifo no blob de caracteres da fonte.
- *
- * @param[in] fnt Fonte utilizada.
- * @return Quantidade de bytes por glifo.
- */
-static inline uint8_t font_glyph_stride(const struct font *fnt)
-{
-	return fnt->is_scan_vertical
-		       ? (uint8_t)(fnt->width * ((fnt->height + (BYTE_BITS - 1)) / BYTE_BITS))
-		       : (uint8_t)(fnt->height * ((fnt->width + (BYTE_BITS - 1)) / BYTE_BITS));
+	return fonts_glyph_width(fnt, (char)character);
 }
 
 /**
@@ -756,15 +745,17 @@ static void draw_vertical_line_base(const uint8_t x, const uint8_t y, uint8_t h)
 static uint8_t print_char(const uint8_t x, const uint8_t y, char character, const struct font *fnt,
 			  const uint8_t scale)
 {
-	const uint8_t *char_bmp;
-
-	if (character < fnt->min_char || character > fnt->max_char) {
-		character = fnt->max_char;
+	if ((uint8_t)character < fnt->min_char || (uint8_t)character > fnt->max_char) {
+		character = (char)fnt->max_char;
 	}
 
-	const uint8_t glyph_width = font_glyph_width(fnt, (uint8_t)character);
+	const uint8_t glyph_width = fonts_glyph_width(fnt, character);
+	const uint8_t *char_bmp = fonts_glyph(fnt, character);
 
-	char_bmp = &fnt->characters[(character - fnt->min_char) * font_glyph_stride(fnt)];
+	if (char_bmp == NULL) {
+		return 0;
+	}
+
 	if (fnt->is_scan_vertical) {
 		print_bmp_vertical(char_bmp, y, x, glyph_width, fnt->height, fnt->width, scale);
 	} else {
