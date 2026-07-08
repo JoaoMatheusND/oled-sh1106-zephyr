@@ -166,6 +166,20 @@ uint16_t display_print(const uint8_t *str, uint8_t top, uint8_t left, enum font_
 		       uint8_t scale);
 
 /**
+ * @brief Mede a largura, em pixels, da primeira linha de uma string, sem desenhá-la.
+ *
+ * Considera larguras por glifo (fontes proporcionais) e o espaçamento entre caracteres,
+ * excluindo o espaçamento após o último caractere. Por isso, o valor difere do retorno de
+ * display_print(), que inclui o espaçamento final.
+ *
+ * @param[in] str Referência para a string.
+ * @param font Fonte a ser usada.
+ * @param scale Fator de escala para o texto.
+ * @return Largura em pixels (0 se str for NULL ou vazia); não é limitada à largura da tela.
+ */
+uint16_t display_text_width(const uint8_t *str, enum font_sizes font, uint8_t scale);
+
+/**
  * @brief Configura o modo de desenho do display.
  *
  * @param mode Modo desejado.

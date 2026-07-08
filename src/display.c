@@ -164,12 +164,13 @@ static inline void draw_byte_h(uint8_t top, uint8_t left, uint8_t byte, uint8_t 
  * @param[in] bmp Bitmap a ser impresso.
  * @param top Posição do canto superior do bitmap.
  * @param left Posição do canto esquerdo do bitmap.
- * @param width Largura do bitmap.
+ * @param width Largura a ser desenhada, em pixels.
  * @param height Altura do bitmap.
+ * @param stride Largura total da célula do bitmap, em colunas (bytes por faixa de 8 linhas).
  * @param scale Escala de impressão.
  */
 static inline void print_bmp_vertical(const uint8_t *bmp, uint8_t top, uint8_t left, uint8_t width,
-				      uint8_t height, uint8_t scale);
+				      uint8_t height, uint8_t stride, uint8_t scale);
 
 /**
  * @brief Imprime um bitmap com leitura horizontal.
@@ -183,6 +184,36 @@ static inline void print_bmp_vertical(const uint8_t *bmp, uint8_t top, uint8_t l
  */
 static inline void print_bmp_horizontal(const uint8_t *bmp, uint8_t top, uint8_t left,
 					uint8_t width, uint8_t height, uint8_t scale);
+
+/**
+ * @brief Obtém a largura de avanço de um glifo, em pixels, sem escala e sem o
+ * espaçamento entre caracteres.
+ *
+ * @param[in] fnt Fonte utilizada.
+ * @param character Caractere desejado.
+ * @return Largura do glifo, em pixels.
+ */
+static inline uint8_t font_glyph_width(const struct font *fnt, uint8_t character)
+{
+	if (character < fnt->min_char || character > fnt->max_char) {
+		character = fnt->max_char;
+	}
+
+	return (fnt->widths == NULL) ? fnt->width : fnt->widths[character - fnt->min_char];
+}
+
+/**
+ * @brief Obtém o número de bytes ocupados por um glifo no blob de caracteres da fonte.
+ *
+ * @param[in] fnt Fonte utilizada.
+ * @return Quantidade de bytes por glifo.
+ */
+static inline uint8_t font_glyph_stride(const struct font *fnt)
+{
+	return fnt->is_scan_vertical
+		       ? (uint8_t)(fnt->width * ((fnt->height + (BYTE_BITS - 1)) / BYTE_BITS))
+		       : (uint8_t)(fnt->height * ((fnt->width + (BYTE_BITS - 1)) / BYTE_BITS));
+}
 
 /**
  * @brief Estrutura os dados de controle do display.
@@ -481,21 +512,57 @@ uint16_t display_print(const uint8_t *str, uint8_t top, const uint8_t left,
 		return 0;
 	}
 
-	uint8_t p_x = left;
 	const struct font *font_p = fonts_get(font);
-	const uint8_t width_limit = (uint8_t)(SCR_W - (font_p->width * scale) - 1);
 
-	while ((*str != '\0') && (p_x < width_limit)) {
-		p_x += print_char(p_x, top, *str, font_p, scale) * scale;
-		str += 1;
+	if (font_p == NULL) {
+		return 0;
+	}
+
+	uint16_t p_x = left;
+
+	while (*str != '\0') {
 		if (*str == '\n') {
 			top += font_p->height + 1;
 			p_x = left;
 			str += 1;
+			continue;
 		}
+
+		if ((p_x + ((uint16_t)font_glyph_width(font_p, *str) * scale)) >= SCR_W) {
+			break;
+		}
+
+		p_x += print_char((uint8_t)p_x, top, *str, font_p, scale) * scale;
+		str += 1;
 	}
 
 	return p_x - left;
+}
+
+uint16_t display_text_width(const uint8_t *str, const enum font_sizes font, const uint8_t scale)
+{
+	if ((str == NULL) || (scale == 0)) {
+		return 0;
+	}
+
+	const struct font *font_p = fonts_get(font);
+
+	if (font_p == NULL) {
+		return 0;
+	}
+
+	uint16_t width = 0;
+
+	while ((*str != '\0') && (*str != '\n')) {
+		width += ((uint16_t)font_glyph_width(font_p, *str) + 1) * scale;
+		str += 1;
+	}
+
+	if (width > 0) {
+		width -= scale;
+	}
+
+	return width;
 }
 
 void display_set_draw_mode(const enum display_draw_mode mode)
@@ -695,15 +762,16 @@ static uint8_t print_char(const uint8_t x, const uint8_t y, char character, cons
 		character = fnt->max_char;
 	}
 
+	const uint8_t glyph_width = font_glyph_width(fnt, (uint8_t)character);
+
+	char_bmp = &fnt->characters[(character - fnt->min_char) * font_glyph_stride(fnt)];
 	if (fnt->is_scan_vertical) {
-		char_bmp = &fnt->characters[(character - fnt->min_char) * fnt->width];
-		print_bmp_vertical(char_bmp, y, x, fnt->width, fnt->height, scale);
+		print_bmp_vertical(char_bmp, y, x, glyph_width, fnt->height, fnt->width, scale);
 	} else {
-		char_bmp = &fnt->characters[(character - fnt->min_char) * fnt->height];
 		print_bmp_horizontal(char_bmp, y, x, fnt->width, fnt->height, scale);
 	}
 
-	return fnt->width + 1;
+	return glyph_width + 1;
 }
 
 static inline void draw_byte_v(uint8_t top, const uint8_t left, uint8_t byte, const uint8_t scale)
@@ -738,7 +806,7 @@ static inline void draw_byte_h(const uint8_t top, uint8_t left, uint8_t byte, co
 
 static inline void print_bmp_vertical(const uint8_t *bmp, uint8_t top, const uint8_t left,
 				      const uint8_t width, const uint8_t height,
-				      const uint8_t scale)
+				      const uint8_t stride, const uint8_t scale)
 {
 	for (uint8_t i = 0; i < height; i += BYTE_BITS) {
 		uint8_t x_pos = left;
@@ -749,6 +817,7 @@ static inline void print_bmp_vertical(const uint8_t *bmp, uint8_t top, const uin
 			bmp += 1;
 			x_pos += scale;
 		}
+		bmp += stride - width;
 		top += BYTE_BITS * scale;
 	}
 }
